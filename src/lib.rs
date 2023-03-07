@@ -128,9 +128,10 @@ impl State {
             if (x - 4) * (x - 4) + (y - 4) * (y - 4) + (z - 4) * (z - 4) > 16 {
                 continue;
             } else {
-                texture_data[i] = 1;
+                texture_data[i] = 255;
             }
         }
+        println!("{:?}", texture_data);
 
         let diffuse_texture = texture::Texture::from_bytes(
             &device,
@@ -148,7 +149,7 @@ impl State {
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
+                        view_dimension: wgpu::TextureViewDimension::D3,
                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
                     },
                     count: None,
@@ -187,7 +188,7 @@ impl State {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[],
+                bind_group_layouts: &[&texture_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -246,8 +247,6 @@ impl State {
             usage: wgpu::BufferUsages::INDEX,
         });
         let num_indices = INDICES.len() as u32;
-
-        
 
         Self {
             surface,

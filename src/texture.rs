@@ -38,30 +38,33 @@ impl Texture {
             size: texture_size,
             mip_level_count: 1,
             sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            dimension: wgpu::TextureDimension::D3,
+            format: wgpu::TextureFormat::R8Unorm,
             // sampled: use in shader
             // copy dst, we want to copy data to this texture
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             label: Some("my texture"),
         });
-        encoder.copy_buffer_to_texture(
-            wgpu::ImageCopyBuffer {
-                buffer: &texture_buffer,
-                layout: wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: std::num::NonZeroU32::new(depth * width),
-                    rows_per_image: std::num::NonZeroU32::new(height),
-                },
-            },
+        
+        queue.write_texture(
+            // Tells wgpu where to copy the pixel data
             wgpu::ImageCopyTexture {
                 texture: &texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
+            // The actual pixel data
+            bytes,
+            // The layout of the texture
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: std::num::NonZeroU32::new(width),
+                rows_per_image: std::num::NonZeroU32::new(height),
+            },
             texture_size,
         );
+
         queue.submit(std::iter::once(encoder.finish()));
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let address_mode = wgpu::AddressMode::ClampToEdge;
