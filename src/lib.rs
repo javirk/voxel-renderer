@@ -131,7 +131,7 @@ impl State {
                 texture_data[i] = 255;
             }
         }
-        texture_data[1] = 255;
+        texture_data[0] = 255;
 
         let diffuse_texture = texture::Texture::from_bytes(
             &device,
