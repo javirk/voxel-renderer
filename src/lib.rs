@@ -38,10 +38,10 @@ impl Vertex {
 }
 
 const VERTICES: &[Vertex] = &[
-    Vertex { position: [-1., -1., 0.0], color: [0.0, 0.0, 0.0], },
-    Vertex { position: [-1., 1., 0.0], color: [0.0, 0.0, 0.0], }, 
-    Vertex { position: [1., 1., 0.0], color: [0.0, 0.0, 0.0], }, 
-    Vertex { position: [1., -1., 0.0], color: [0.0, 0.0, 0.0], }, 
+    Vertex { position: [-1., -1., 0.0], color: [0.0, 0.0, 0.0] },
+    Vertex { position: [-1., 1., 0.0], color: [0.0, 0.0, 0.0] }, 
+    Vertex { position: [1., 1., 0.0], color: [0.0, 0.0, 0.0] }, 
+    Vertex { position: [1., -1., 0.0], color: [0.0, 0.0, 0.0] }, 
 ];
 
 const INDICES: &[u16; 6] = &[
@@ -131,7 +131,7 @@ impl State {
                 texture_data[i] = 255;
             }
         }
-        println!("{:?}", texture_data);
+        texture_data[1] = 255;
 
         let diffuse_texture = texture::Texture::from_bytes(
             &device,
