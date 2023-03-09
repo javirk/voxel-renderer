@@ -144,46 +144,91 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
     var pos: vec3<f32> = eye + dir * t.x;
 
-    // DDA algorithm:
-    var sampling_point: vec3<i32> = vec3<i32>(
+    var sampling_point: vec3<i32> = vec3<i32>(  // The initial voxel
         i32((pos.x + 1.) * 32.),
         i32((pos.y + 1.) * 32.),
         i32((pos.z + 1.) * 32.),
     );
+
+    var map_pos: vec3<i32> = vec3<i32>(floor(pos));
+    var delta_dist: vec3<f32> = abs(vec3<f32>(length(dir)) / dir);
+    //var ray_step: vec3<i32> = vec3<i32>(sign(dir));
+    var side_dist: vec3<f32> = (sign(dir) * (vec3<f32>(sampling_point) / 32. - pos) + (sign(dir) * 0.5) + 0.5) * delta_dist;
     
 
-
-    for (var i: i32 = 0; i < 2500; i = i + 1) {
-        // var t: vec2<f32> = intersectAABB(pos, dir, vec3<f32>(-1.0, -1.0, -1.0), vec3<f32>(1.0, 1.0, 1.0));
-        if (pos.x < -1.0 || pos.x > 1.0 || pos.y < -1.0 || pos.y > 1.0 || pos.z < -1.0 || pos.z > 1.0) {
-            pos = pos + dir * 0.005;
-            continue;
-        } 
-
-        var sampling_point: vec3<i32> = vec3<i32>(
-            i32((pos.x + 1.) * 32.),
-            i32((pos.y + 1.) * 32.),
-            i32((pos.z + 1.) * 32.),
-        );
-
+    // DDA algorithm:
+    for (var i: i32 = 0; i < 64; i++) {
         var sample: f32 = textureLoad(t_diffuse, sampling_point, 0).r;
         if (sample > 0.5) {
             // Calculate center
             var center: vec3<f32> = get_voxel_center(sampling_point);
             var normal = get_normal(center, pos);
-            //return vec4<f32>(normal, 1.0);
-            //return vec4<f32>(1.0, 0.0, 0.0, 1.0);
             var K_a: vec3<f32> = vec3<f32>(0.2, 0.2, 0.2);
             var K_d: vec3<f32> = vec3<f32>(0.7, 0.2, 0.2);
             var K_s: vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
             var shininess: f32 = 10.0;
             
             var color = phongIllumination(K_a, K_d, K_s, shininess, pos, eye, normal);
-            // Translate the previous lines to WGSL and output the color
             return vec4<f32>(color, 1.0);
         }
-        pos = pos + dir * 0.005;
-    }
 
+        if (side_dist.x < side_dist.y) {
+            if (side_dist.x < side_dist.z) {
+                // Move in x direction
+                side_dist.x += delta_dist.x;
+                sampling_point.x += 1;
+            }
+            else {
+                side_dist.z += delta_dist.z;
+                sampling_point.z += 1;
+            }
+        }
+        else {
+            if (side_dist.y < side_dist.z) {
+                side_dist.y += delta_dist.y;
+                sampling_point.y += 1;
+            }
+            else {
+                side_dist.z += delta_dist.z;
+                sampling_point.z += 1;
+            }
+        }
+        
+    }
     return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+
+
+    // for (var i: i32 = 0; i < 2500; i = i + 1) {
+    //     // var t: vec2<f32> = intersectAABB(pos, dir, vec3<f32>(-1.0, -1.0, -1.0), vec3<f32>(1.0, 1.0, 1.0));
+    //     if (pos.x < -1.0 || pos.x > 1.0 || pos.y < -1.0 || pos.y > 1.0 || pos.z < -1.0 || pos.z > 1.0) {
+    //         pos = pos + dir * 0.005;
+    //         continue;
+    //     } 
+
+    //     var sampling_point: vec3<i32> = vec3<i32>(
+    //         i32((pos.x + 1.) * 32.),
+    //         i32((pos.y + 1.) * 32.),
+    //         i32((pos.z + 1.) * 32.),
+    //     );
+
+    //     var sample: f32 = textureLoad(t_diffuse, sampling_point, 0).r;
+    //     if (sample > 0.5) {
+    //         // Calculate center
+    //         var center: vec3<f32> = get_voxel_center(sampling_point);
+    //         var normal = get_normal(center, pos);
+    //         //return vec4<f32>(normal, 1.0);
+    //         //return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+    //         var K_a: vec3<f32> = vec3<f32>(0.2, 0.2, 0.2);
+    //         var K_d: vec3<f32> = vec3<f32>(0.7, 0.2, 0.2);
+    //         var K_s: vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+    //         var shininess: f32 = 10.0;
+            
+    //         var color = phongIllumination(K_a, K_d, K_s, shininess, pos, eye, normal);
+    //         // Translate the previous lines to WGSL and output the color
+    //         return vec4<f32>(color, 1.0);
+    //     }
+    //     pos = pos + dir * 0.005;
+    // }
+
+    // return vec4<f32>(0.0, 0.0, 0.0, 1.0);
 }
