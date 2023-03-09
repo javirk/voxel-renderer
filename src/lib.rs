@@ -9,6 +9,8 @@ use winit::{
 
 mod texture;
 
+const DIM: usize = 64;
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
@@ -119,25 +121,25 @@ impl State {
         surface.configure(&device, &config);
 
         // Make the texture
-        let mut texture_data = [0; 8 * 8 * 8];
+        let radius = (DIM / 2) as i32;
+        let mut texture_data = [0; DIM * DIM * DIM];
         // Fill the texture with a sphere
         for i in 0..texture_data.len() {
-            let x = (i % 8) as i32;
-            let y = ((i / 8) % 8) as i32;
-            let z = (i / 64) as i32;
-            if (x - 4) * (x - 4) + (y - 4) * (y - 4) + (z - 4) * (z - 4) > 16 {
+            let x = (i % DIM) as i32;
+            let y = ((i / DIM) % DIM) as i32;
+            let z = (i / (DIM * DIM)) as i32;
+            if (x - radius) * (x - radius) + (y - radius) * (y - radius) + (z - radius) * (z - radius) > (radius * radius) {
                 continue;
             } else {
                 texture_data[i] = 255;
             }
         }
-        texture_data[0] = 255;
 
         let diffuse_texture = texture::Texture::from_bytes(
             &device,
             &queue,
             &texture_data,
-            8, 8, 8,
+            DIM, DIM, DIM,
             Some("sphere_texture"),
         ).unwrap();
 

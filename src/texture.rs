@@ -13,15 +13,15 @@ impl Texture {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         bytes: &[u8],
-        width: u32,
-        height: u32,
-        depth: u32,
+        width: usize,
+        height: usize,
+        depth: usize,
         label: Option<&str>,
     ) -> Result<Self> {
         let texture_size = wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: depth,
+            width: width as u32,
+            height: height as u32,
+            depth_or_array_layers: depth as u32,
         };
 
         let texture_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -59,8 +59,8 @@ impl Texture {
             // The layout of the texture
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(width),
-                rows_per_image: std::num::NonZeroU32::new(height),
+                bytes_per_row: std::num::NonZeroU32::new(width as u32),
+                rows_per_image: std::num::NonZeroU32::new(height as u32),
             },
             texture_size,
         );
