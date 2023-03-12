@@ -1,4 +1,6 @@
 use std::iter;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 
 use wgpu::util::DeviceExt;
 use winit::{
@@ -7,9 +9,12 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
+mod uniforms;
 mod texture;
 
-const DIM: usize = 64;
+use crate::uniforms::{UniformBuffer, Uniform};
+
+const DIM: usize = 8;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -64,6 +69,9 @@ struct State {
     diffuse_bind_group: wgpu::BindGroup,
     num_indices: u32,
     window: Window,
+    uniform: Uniform,
+    uniform_buf: UniformBuffer,
+    uniform_bind_group: wgpu::BindGroup,
 }
 
 impl State {
@@ -135,6 +143,31 @@ impl State {
             }
         }
 
+        let uniform = Uniform::new([DIM as f32, DIM as f32, DIM as f32]);
+        println!("{:?}", uniform.texture_dims);
+        let uniform_buf = UniformBuffer::new(uniform, &device);
+
+        let uniform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: uniform_buf.binding_type(),
+                count: None,
+            }],
+            label: Some("uniform_bind_group_layout"),
+        });
+
+        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &uniform_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buf.binding_resource(),
+                },
+            ],
+            label: Some("uniform_bind_group"),
+        });
+
         let diffuse_texture = texture::Texture::from_bytes(
             &device,
             &queue,
@@ -190,7 +223,7 @@ impl State {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&texture_bind_group_layout],
+                bind_group_layouts: &[&uniform_bind_group_layout, &texture_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -263,6 +296,9 @@ impl State {
             diffuse_texture,
             num_indices,
             window,
+            uniform,
+            uniform_buf,
+            uniform_bind_group,
         }
     }
 
@@ -318,11 +354,15 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
+            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.diffuse_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
+
+        // self.uniform.itime = (SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros() as f32 - self.uniform.itime) / 1000000.0;
+        // self.queue.write_buffer(&self.uniform_buf.buffer, 0, bytemuck::cast_slice(&[self.uniform]));
 
         self.queue.submit(iter::once(encoder.finish()));
         output.present();

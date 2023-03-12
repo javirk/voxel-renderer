@@ -1,5 +1,12 @@
 // Vertex shader
 
+let TEXTURE_DIMENSION: f32 = 64.;  // TODO: Make it come from a uniform
+
+struct Uniforms {
+    iTime: f32,
+    texture_dims: vec3<f32>,
+}
+
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) color: vec3<f32>,
@@ -24,10 +31,22 @@ fn vs_main(
 }
 
 
+// Fragment shader
+
+@group(0) @binding(0) var<uniform> unif: Uniforms;
+@group(1) @binding(0) var t_diffuse: texture_3d<f32>;
+@group(1) @binding(1) var s_diffuse: sampler;
+
+
 fn rayDirection(fieldOfView: f32, xy: vec2<f32>) -> vec3<f32> {
-    var z: f32 = 2. / tan(radians(fieldOfView) / 2.0);
-    return normalize(vec3<f32>(xy, -z));
+    var aspect_ratio: f32 = 800. / 600.;
+    var px = (xy.x) * tan(radians(fieldOfView) / 2.0) * aspect_ratio;
+    var py = (xy.y) * tan(radians(fieldOfView) / 2.0);
+    return normalize(vec3<f32>(px, py, -1.0));
+    // var z: f32 = 2. / tan(radians(fieldOfView) / 2.0);
+    // return normalize(vec3<f32>(xy, -z));
 }
+
 
 fn get_normal(center: vec3<f32>, hit_point: vec3<f32>) -> vec3<f32> {
     var distance_vec: vec3<f32> = hit_point - center;
@@ -41,11 +60,12 @@ fn get_normal(center: vec3<f32>, hit_point: vec3<f32>) -> vec3<f32> {
     }
 }
 
+
 fn get_voxel_center(voxel: vec3<i32>) -> vec3<f32> {
     return vec3<f32>(
-        (f32(voxel.x) + 0.5) / 32. - 1.,
-        (f32(voxel.y) + 0.5) / 32. - 1.,
-        (f32(voxel.z) + 0.5) / 32. - 1.,
+        (f32(voxel.x) + 0.5) / (unif.texture_dims.x / 2.) - 1.,
+        (f32(voxel.y) + 0.5) / (unif.texture_dims.y / 2.) - 1.,
+        (f32(voxel.z) + 0.5) / (unif.texture_dims.z / 2.) - 1.,
     );
 }
 
@@ -126,16 +146,14 @@ fn phongIllumination(k_a: vec3<f32>, k_d: vec3<f32>, k_s: vec3<f32>, alpha: f32,
     return color;
 }
 
-// Fragment shader
-
-@group(0) @binding(0) var t_diffuse: texture_3d<f32>;
-@group(0) @binding(1) var s_diffuse: sampler;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    //var xy: vec2<f32> = vec2<f32>(0., 0.);
-    var dir: vec3<f32> = rayDirection(45.0, in.tex_pos.xy);
-    var eye: vec3<f32> = vec3<f32>(0.0, 0.0, 10.0);
+    // var tt: vec2<f32> = in.tex_pos.xy;
+    // tt.x = -1.;
+    // tt.y = -1.;
+    var dir: vec3<f32> = rayDirection(60.0, in.tex_pos.xy);
+    var eye: vec3<f32> = vec3<f32>(0.0, 0.0, 3.0);
     
     // We start outside of the volume, so we need to find the first intersection. If there is none, the pixel is black.
     var t: vec2<f32> = intersectAABB(eye, dir, vec3<f32>(-1.0, -1.0, -1.0), vec3<f32>(1.0, 1.0, 1.0));
@@ -144,91 +162,77 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
     var pos: vec3<f32> = eye + dir * t.x;
 
+    var voxel_size: vec3<f32> = 2. / unif.texture_dims;
+
     var sampling_point: vec3<i32> = vec3<i32>(  // The initial voxel
-        i32((pos.x + 1.) * 32.),
-        i32((pos.y + 1.) * 32.),
-        i32((pos.z + 1.) * 32.),
+        i32((pos.x + 1.) * (unif.texture_dims.x / 2. - 1e-3)),
+        i32((pos.y + 1.) * (unif.texture_dims.y / 2. - 1e-3)),
+        i32((pos.z + 1.) * (unif.texture_dims.z / 2. - 1e-3)),
     );
 
-    var map_pos: vec3<i32> = vec3<i32>(floor(pos));
-    var delta_dist: vec3<f32> = abs(vec3<f32>(length(dir)) / dir);
-    //var ray_step: vec3<i32> = vec3<i32>(sign(dir));
-    var side_dist: vec3<f32> = (sign(dir) * (vec3<f32>(sampling_point) / 32. - pos) + (sign(dir) * 0.5) + 0.5) * delta_dist;
-    
+    var center: vec3<f32> = get_voxel_center(sampling_point);
+    var next_bound: vec3<f32> = center + sign(dir) * voxel_size * 0.5;
+    var step_dir: vec3<i32> = vec3<i32>(sign(dir));
+    var t_max: vec3<f32> = (next_bound - pos) / dir;
+    var delta_dist: vec3<f32> = voxel_size / (dir);
+
+    var K_a: vec3<f32> = vec3<f32>(0.2, 0.2, 0.2);
+    var K_d: vec3<f32> = vec3<f32>(0.7, 0.2, 0.2);
+    var K_s: vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+    var shininess: f32 = 10.0;
+
+    var t_count: vec3<f32> = vec3<f32>(0., 0., 0.);
+
+    // return vec4<f32>(t_max, 1.0);
 
     // DDA algorithm:
     for (var i: i32 = 0; i < 64; i++) {
         var sample: f32 = textureLoad(t_diffuse, sampling_point, 0).r;
-        if (sample > 0.5) {
+        if (sample > 0.) {
             // Calculate center
-            var center: vec3<f32> = get_voxel_center(sampling_point);
-            var normal = get_normal(center, pos);
-            var K_a: vec3<f32> = vec3<f32>(0.2, 0.2, 0.2);
-            var K_d: vec3<f32> = vec3<f32>(0.7, 0.2, 0.2);
-            var K_s: vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
-            var shininess: f32 = 10.0;
-            
+            center = get_voxel_center(sampling_point);
+            var normal = get_normal(center, pos);            
             var color = phongIllumination(K_a, K_d, K_s, shininess, pos, eye, normal);
-            return vec4<f32>(color, 1.0);
+            //return vec4<f32>(color, 1.0);
+            return vec4<f32>(1., 0., 0., 1.0);
+            // return vec4<f32>(f32(sampling_point.x) / 64., f32(sampling_point.y) / 64., f32(sampling_point.z) / 64., 1.);
         }
 
-        if (side_dist.x < side_dist.y) {
-            if (side_dist.x < side_dist.z) {
+        if (t_max.x <= t_max.y) {
+            if (t_max.x <= t_max.z) {
                 // Move in x direction
-                side_dist.x += delta_dist.x;
-                sampling_point.x += 1;
+                t_max.x += delta_dist.x;
+                if abs(t_max.x) > 1. {
+                    t_count.x += 1.;
+                    break;
+                } 
+                sampling_point.x += step_dir.x;
+            } else {
+                t_max.z += delta_dist.z;
+                if abs(t_max.z) > 1. {
+                    t_count.z += 1.;
+                    break;
+                } 
+                sampling_point.z += step_dir.z;
             }
-            else {
-                side_dist.z += delta_dist.z;
-                sampling_point.z += 1;
-            }
-        }
-        else {
-            if (side_dist.y < side_dist.z) {
-                side_dist.y += delta_dist.y;
-                sampling_point.y += 1;
-            }
-            else {
-                side_dist.z += delta_dist.z;
-                sampling_point.z += 1;
+        } else {
+            if (t_max.y < t_max.z) {
+                t_max.y += delta_dist.y;
+                if abs(t_max.y) > 1. {
+                    t_count.y += 1.;
+                    break
+                } 
+                sampling_point.y += step_dir.y;
+            } else {
+                t_max.z += delta_dist.z;
+                if abs(t_max.z) > 1. {
+                    t_count.z += 1.;
+                    break;
+                } 
+                sampling_point.z += step_dir.z;
             }
         }
         
     }
-    return vec4<f32>(0.0, 0.0, 0.0, 1.0);
-
-
-    // for (var i: i32 = 0; i < 2500; i = i + 1) {
-    //     // var t: vec2<f32> = intersectAABB(pos, dir, vec3<f32>(-1.0, -1.0, -1.0), vec3<f32>(1.0, 1.0, 1.0));
-    //     if (pos.x < -1.0 || pos.x > 1.0 || pos.y < -1.0 || pos.y > 1.0 || pos.z < -1.0 || pos.z > 1.0) {
-    //         pos = pos + dir * 0.005;
-    //         continue;
-    //     } 
-
-    //     var sampling_point: vec3<i32> = vec3<i32>(
-    //         i32((pos.x + 1.) * 32.),
-    //         i32((pos.y + 1.) * 32.),
-    //         i32((pos.z + 1.) * 32.),
-    //     );
-
-    //     var sample: f32 = textureLoad(t_diffuse, sampling_point, 0).r;
-    //     if (sample > 0.5) {
-    //         // Calculate center
-    //         var center: vec3<f32> = get_voxel_center(sampling_point);
-    //         var normal = get_normal(center, pos);
-    //         //return vec4<f32>(normal, 1.0);
-    //         //return vec4<f32>(1.0, 0.0, 0.0, 1.0);
-    //         var K_a: vec3<f32> = vec3<f32>(0.2, 0.2, 0.2);
-    //         var K_d: vec3<f32> = vec3<f32>(0.7, 0.2, 0.2);
-    //         var K_s: vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
-    //         var shininess: f32 = 10.0;
-            
-    //         var color = phongIllumination(K_a, K_d, K_s, shininess, pos, eye, normal);
-    //         // Translate the previous lines to WGSL and output the color
-    //         return vec4<f32>(color, 1.0);
-    //     }
-    //     pos = pos + dir * 0.005;
-    // }
-
-    // return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    return vec4<f32>(t_count / 64., 1.0);
 }
