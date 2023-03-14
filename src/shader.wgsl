@@ -146,21 +146,45 @@ fn phongIllumination(k_a: vec3<f32>, k_d: vec3<f32>, k_s: vec3<f32>, alpha: f32,
     return color;
 }
 
+fn new_raydir(lookfrom: vec3<f32>, lookat: vec3<f32>, up: vec3<f32>, fov: f32, tex_pos: vec2<f32>) -> vec3<f32> {
+    var tex_pos_norm = (tex_pos + 1.) / 2.;  // TODO: Please... this is so ugly. Change the other code to use normalized coordinates (-1, 1).
+    var aspect_ratio: f32 = 600. / 800.;
+    var theta: f32 = radians(fov);
+    var half_width: f32 = tan(theta / 2.);
+    var half_height: f32 = half_width * aspect_ratio;
+
+    var w: vec3<f32> = normalize(lookfrom - lookat);
+    var u: vec3<f32> = normalize(cross(up, w));
+    var v: vec3<f32> = cross(w, u);
+
+    var lower_left_corner: vec3<f32> = lookfrom - half_width * u - half_height * v - w;
+    var horizontal: vec3<f32> = 2. * half_width * u;
+    var vertical: vec3<f32> = 2. * half_height * v;
+    var ray_dir: vec3<f32> = lower_left_corner + tex_pos_norm.x * horizontal + tex_pos_norm.y * vertical - lookfrom;
+    return ray_dir;
+}
+
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // var tt: vec2<f32> = in.tex_pos.xy;
     // tt.x = -1.;
     // tt.y = -1.;
-    var dir: vec3<f32> = rayDirection(60.0, in.tex_pos.xy);
-    var eye: vec3<f32> = vec3<f32>(0.0, 0.0, 3.0);
+    var lookat: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
+    var lookfrom: vec3<f32> = vec3<f32>(0.0, 0.0, 5.0);
+    var up: vec3<f32> = vec3<f32>(0.0, 1.0, 0.0);
+
+    var dir: vec3<f32> = new_raydir(lookfrom, lookat, up, 60.0, in.tex_pos.xy);
+
+    //var dir: vec3<f32> = rayDirection(60.0, in.tex_pos.xy);
+    
     
     // We start outside of the volume, so we need to find the first intersection. If there is none, the pixel is black.
-    var t: vec2<f32> = intersectAABB(eye, dir, vec3<f32>(-1.0, -1.0, -1.0), vec3<f32>(1.0, 1.0, 1.0));
+    var t: vec2<f32> = intersectAABB(lookfrom, dir, vec3<f32>(-1.0, -1.0, -1.0), vec3<f32>(1.0, 1.0, 1.0));
     if (t.x > t.y) {
         return vec4<f32>(0.0, 0.0, 0.0, 1.0);
     }
-    var pos: vec3<f32> = eye + dir * t.x;
+    var pos: vec3<f32> = lookfrom + dir * t.x;
 
     var voxel_size: vec3<f32> = 2. / unif.texture_dims;
 
@@ -186,13 +210,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // return vec4<f32>(t_max, 1.0);
 
     // DDA algorithm:
-    for (var i: i32 = 0; i < 64; i++) {
+    for (var i: i32 = 0; i < 128; i++) {
         var sample: f32 = textureLoad(t_diffuse, sampling_point, 0).r;
         if (sample > 0.) {
             // Calculate center
             center = get_voxel_center(sampling_point);
             var normal = get_normal(center, pos);            
-            var color = phongIllumination(K_a, K_d, K_s, shininess, pos, eye, normal);
+            var color = phongIllumination(K_a, K_d, K_s, shininess, pos, lookfrom, normal);
             //return vec4<f32>(color, 1.0);
             return vec4<f32>(1., 0., 0., 1.0);
             // return vec4<f32>(f32(sampling_point.x) / 64., f32(sampling_point.y) / 64., f32(sampling_point.z) / 64., 1.);
@@ -234,5 +258,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         }
         
     }
-    return vec4<f32>(t_count / 64., 1.0);
+    return vec4<f32>(0.,0., 0., 1.0);
 }

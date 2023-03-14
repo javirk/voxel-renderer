@@ -14,7 +14,7 @@ mod texture;
 
 use crate::uniforms::{UniformBuffer, Uniform};
 
-const DIM: usize = 8;
+const DIM: usize = 64;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
