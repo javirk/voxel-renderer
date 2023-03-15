@@ -11,8 +11,10 @@ use winit::{
 
 mod uniforms;
 mod texture;
+mod camera;
 
 use crate::uniforms::{UniformBuffer, Uniform};
+use crate::camera::{Camera, CameraUniform, CameraController};
 
 const DIM: usize = 64;
 
@@ -67,7 +69,11 @@ struct State {
     index_buffer: wgpu::Buffer,
     diffuse_texture: texture::Texture,
     diffuse_bind_group: wgpu::BindGroup,
-    num_indices: u32,
+    camera: camera::Camera,
+    camera_uniform: CameraUniform,
+    camera_buffer: wgpu::Buffer,
+    camera_controller: CameraController,
+    camera_bind_group: wgpu::BindGroup,
     window: Window,
     uniform: Uniform,
     uniform_buf: UniformBuffer,
@@ -144,7 +150,6 @@ impl State {
         }
 
         let uniform = Uniform::new([DIM as f32, DIM as f32, DIM as f32]);
-        println!("{:?}", uniform.texture_dims);
         let uniform_buf = UniformBuffer::new(uniform, &device);
 
         let uniform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -167,6 +172,57 @@ impl State {
             ],
             label: Some("uniform_bind_group"),
         });
+
+        // Create the camera
+        let camera = Camera {
+            eye: (0.0, 0.0, 5.0).into(),
+            target: (0.0, 0.0, 0.0).into(),
+            up: cgmath::Vector3::unit_y(),
+            aspect: config.width as f32 / config.height as f32,
+            fovy: 45.0,
+            znear: 0.1,
+            zfar: 100.0,
+        };
+        let mut camera_uniform = CameraUniform::new();
+        camera_uniform.update_position(&camera);
+        camera_uniform.update_target(&camera);
+
+        let camera_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Camera Buffer"),
+                contents: bytemuck::cast_slice(&[camera_uniform]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            }
+        );
+
+        let camera_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ],
+            label: Some("camera_bind_group_layout"),
+        });
+
+        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &camera_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: camera_buffer.as_entire_binding(),
+                }
+            ],
+            label: Some("camera_bind_group"),
+        });
+
+         let camera_controller = CameraController::new(0.2);
 
         let diffuse_texture = texture::Texture::from_bytes(
             &device,
@@ -223,7 +279,7 @@ impl State {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&uniform_bind_group_layout, &texture_bind_group_layout],
+                bind_group_layouts: &[&uniform_bind_group_layout, &texture_bind_group_layout, &camera_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -281,7 +337,6 @@ impl State {
             contents: bytemuck::cast_slice(INDICES),
             usage: wgpu::BufferUsages::INDEX,
         });
-        let num_indices = INDICES.len() as u32;
 
         Self {
             surface,
@@ -294,7 +349,11 @@ impl State {
             index_buffer,
             diffuse_bind_group,
             diffuse_texture,
-            num_indices,
+            camera,
+            camera_uniform,
+            camera_buffer,
+            camera_bind_group,
+            camera_controller,
             window,
             uniform,
             uniform_buf,
@@ -315,12 +374,15 @@ impl State {
         }
     }
 
-    #[allow(unused_variables)]
     fn input(&mut self, event: &WindowEvent) -> bool {
-        false
+        self.camera_controller.process_events(event)
     }
 
-    fn update(&mut self) {}
+    fn update(&mut self) {
+        self.camera_controller.update_camera(&mut self.camera);
+        self.camera_uniform.update_position(&self.camera);
+        self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
+    }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
@@ -356,9 +418,10 @@ impl State {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_bind_group(1, &self.diffuse_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..1);
         }
 
         // self.uniform.itime = (SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros() as f32 - self.uniform.itime) / 1000000.0;

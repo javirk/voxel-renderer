@@ -9,7 +9,7 @@ pub struct Uniform {  // Annoying 16 byte alignment
     pub itime: f32,
     _padding: [u32; 3],
     pub texture_dims: [f32; 3],
-    _padding2: u32
+    _padding2: u32,
 }
 
 impl Uniform {
@@ -18,7 +18,7 @@ impl Uniform {
             itime: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f32(),
             _padding: [0; 3],
             texture_dims: texture_dims,
-            _padding2: 0
+            _padding2: 0,
         }
     }
 }
