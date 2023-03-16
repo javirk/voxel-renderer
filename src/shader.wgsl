@@ -162,22 +162,27 @@ fn rayDirection(lookfrom: vec3<f32>, lookat: vec3<f32>, up: vec3<f32>, fov: f32,
 
 fn trivial_marching(pos: vec3<f32>, dir: vec3<f32>, K_a: vec3<f32>, K_d: vec3<f32>, K_s: vec3<f32>, shininess: f32, lookfrom: vec3<f32>) -> vec4<f32> {
     var pos: vec3<f32> = pos;
-    for (var i: i32 = 0; i < 2000; i++) {
+    for (var i: i32 = 0; i < 20000; i++) {
+        
         var sampling_point: vec3<i32> = vec3<i32>(
-            i32((pos.x + 1.) * (unif.texture_dims.x / 2.)),
-            i32((pos.y + 1.) * (unif.texture_dims.y / 2.)),
-            i32((pos.z + 1.) * (unif.texture_dims.z / 2.)),
+            i32((pos.x + 1.) * (unif.texture_dims.x / 2. - 1e-3)),
+            i32((pos.y + 1.) * (unif.texture_dims.y / 2. - 1e-3)),
+            i32((pos.z + 1.) * (unif.texture_dims.z / 2. - 1e-3)),
         );
         var sample: f32 = textureLoad(t_diffuse, sampling_point, 0).r;
         if (sample > 0.) {
             var center = get_voxel_center(sampling_point);
             var normal = get_normal(center, pos);            
             var color = phongIllumination(K_a, K_d, K_s, shininess, pos, lookfrom, normal);
-            color = vec3<f32>(1., 0., 0.);
+            //color = vec3<f32>(1., 0., 0.);
             return vec4<f32>(color, 1.0);
         }
 
-        pos = pos + dir * 0.01;
+        pos = pos + dir * 0.0001;
+        // Check if the position is out of the borders
+        if (pos.x < -1. || pos.x > 1. || pos.y < -1. || pos.y > 1. || pos.z < -1. || pos.z > 1.) {
+            return vec4<f32>(0., 0., 0., 1.);
+        }
     }
     return vec4<f32>(0.,0., 0., 1.0);
 }
@@ -188,16 +193,21 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var lookat: vec3<f32> = camera.lookat;
     var lookfrom = camera.eye;
     var up: vec3<f32> = vec3<f32>(0.0, 1.0, 0.0);
-
     var dir: vec3<f32> = rayDirection(lookfrom, lookat, up, 60.0, in.tex_pos.xy);
-    
+
+    // TODO: Put all this into a light struct
+    var K_a: vec3<f32> = vec3<f32>(0.2, 0.2, 0.2);
+    var K_d: vec3<f32> = vec3<f32>(0.7, 0.2, 0.2);
+    var K_s: vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+    var shininess: f32 = 10.0;
     
     // We start outside of the volume, so we need to find the first intersection. If there is none, the pixel is black.
     var t: vec2<f32> = intersectAABB(lookfrom, dir, vec3<f32>(-1.0, -1.0, -1.0), vec3<f32>(1.0, 1.0, 1.0));
     if (t.x > t.y) {
-        return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        return vec4<f32>(1.0, 0.0, 0.0, 1.0);
     }
     var pos: vec3<f32> = lookfrom + dir * t.x;
+    var final_pos: vec3<f32> = lookfrom + dir * t.y;
 
     var voxel_size: vec3<f32> = 2. / unif.texture_dims;
 
@@ -213,66 +223,57 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var t_max: vec3<f32> = (next_bound - pos) / dir;
     var delta_dist: vec3<f32> = voxel_size / (dir);
 
-    // TODO: Put all this into a light struct
-    var K_a: vec3<f32> = vec3<f32>(0.2, 0.2, 0.2);
-    var K_d: vec3<f32> = vec3<f32>(0.7, 0.2, 0.2);
-    var K_s: vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
-    var shininess: f32 = 10.0;
-
     var t_count: vec3<f32> = vec3<f32>(0., 0., 0.);
-
-    // return vec4<f32>(t_max, 1.0);
-
-    return trivial_marching(pos, dir, K_a, K_d, K_s, shininess, lookfrom);
+    //return trivial_marching(pos, dir, K_a, K_d, K_s, shininess, lookfrom);
 
     // DDA algorithm:
-    // for (var i: i32 = 0; i < 1000; i++) {
-    //     var sample: f32 = textureLoad(t_diffuse, sampling_point, 0).r;
-    //     if (sample > 0.) {
-    //         // Calculate center
-    //         center = get_voxel_center(sampling_point);
-    //         var normal = get_normal(center, pos);            
-    //         var color = phongIllumination(K_a, K_d, K_s, shininess, pos, lookfrom, normal);
-    //         return vec4<f32>(color, 1.0);
-    //         // return vec4<f32>(1., 0., 0., 1.0);
-    //         // return vec4<f32>(f32(sampling_point.x) / 64., f32(sampling_point.y) / 64., f32(sampling_point.z) / 64., 1.);
-    //     }
+    for (var i: i32 = 0; i < 1000; i++) {
+        var sample: f32 = textureLoad(t_diffuse, sampling_point, 0).r;
+        if (sample > 0.) {
+            // Calculate center
+            center = get_voxel_center(sampling_point);
+            var normal = get_normal(center, pos);            
+            var color = phongIllumination(K_a, K_d, K_s, shininess, pos, lookfrom, normal);
+            return vec4<f32>(color, 1.0);
+            // return vec4<f32>(1., 0., 0., 1.0);
+            // return vec4<f32>(f32(sampling_point.x) / 64., f32(sampling_point.y) / 64., f32(sampling_point.z) / 64., 1.);
+        }
 
-    //     if (t_max.x <= t_max.y) {
-    //         if (t_max.x <= t_max.z) {
-    //             // Move in x direction
-    //             t_max.x += delta_dist.x;
-    //             if abs(t_max.x) > 1. {
-    //                 t_count.x += 1.;
-    //                 break;
-    //             } 
-    //             sampling_point.x += step_dir.x;
-    //         } else {
-    //             t_max.z += delta_dist.z;
-    //             if abs(t_max.z) > 1. {
-    //                 t_count.z += 1.;
-    //                 break;
-    //             } 
-    //             sampling_point.z += step_dir.z;
-    //         }
-    //     } else {
-    //         if (t_max.y < t_max.z) {
-    //             t_max.y += delta_dist.y;
-    //             if abs(t_max.y) > 1. {
-    //                 t_count.y += 1.;
-    //                 break
-    //             } 
-    //             sampling_point.y += step_dir.y;
-    //         } else {
-    //             t_max.z += delta_dist.z;
-    //             if abs(t_max.z) > 1. {
-    //                 t_count.z += 1.;
-    //                 break;
-    //             } 
-    //             sampling_point.z += step_dir.z;
-    //         }
-    //     }
+        if (t_max.x <= t_max.y) {
+            if (t_max.x <= t_max.z) {
+                // Move in x direction
+                t_max.x += delta_dist.x;
+                if abs(t_max.x) > 1. {
+                    t_count.x += 1.;
+                    break;
+                } 
+                sampling_point.x += step_dir.x;
+            } else {
+                t_max.z += delta_dist.z;
+                if abs(t_max.z) > 1. {
+                    t_count.z += 1.;
+                    break;
+                } 
+                sampling_point.z += step_dir.z;
+            }
+        } else {
+            if (t_max.y < t_max.z) {
+                t_max.y += delta_dist.y;
+                if abs(t_max.y) > 1. {
+                    t_count.y += 1.;
+                    break
+                } 
+                sampling_point.y += step_dir.y;
+            } else {
+                t_max.z += delta_dist.z;
+                if abs(t_max.z) > 1. {
+                    t_count.z += 1.;
+                    break;
+                } 
+                sampling_point.z += step_dir.z;
+            }
+        }
         
-    // }
-    
+    }
+    return vec4<f32>(0.,0., 0., 1.0);
 }
