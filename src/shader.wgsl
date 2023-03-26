@@ -188,14 +188,14 @@ fn trivial_marching(pos: vec3<f32>, dir: vec3<f32>, K_a: vec3<f32>, K_d: vec3<f3
 }
 
 fn fast_marching(pos: vec3<f32>, dir: vec3<f32>, K_a: vec3<f32>, K_d: vec3<f32>, K_s: vec3<f32>, shininess: f32, lookfrom: vec3<f32>) -> vec4<f32> {
-    var voxel_size = 1./ unif.texture_dims;
+    var voxel_size = 1./ unif.texture_dims;  // Careful: calculated like this and not 2 / unif.texture_dims because we will use it in a space [0, 1]. Not sure about this.
     var i_voxel: vec3<i32> = clamp(vec3<i32>((pos + 1.) / 2. * unif.texture_dims), vec3(0, 0, 0), vec3<i32>(unif.texture_dims) - 1);
     var dir_sign: vec3<f32> = sign(dir);
     var bound: vec3<f32> = voxel_size * (vec3<f32>(i_voxel) + clamp(dir_sign, vec3(0., 0., 0.), vec3(1., 1., 1.)));
     bound = bound * 2. - 1.;
 
     var inv_dir: vec3<f32> = 1. / dir;
-    var t: vec3<f32> = (bound - pos) * inv_dir;
+    var t: vec3<f32> = (bound - pos) * inv_dir * dir_sign;
     var delta: vec3<f32> = voxel_size * inv_dir * dir_sign;
 
     var t_total: f32 = 0.;
@@ -204,10 +204,11 @@ fn fast_marching(pos: vec3<f32>, dir: vec3<f32>, K_a: vec3<f32>, K_d: vec3<f32>,
         var sample: f32 = textureLoad(t_diffuse, i_voxel, 0).r;
         if (sample > 0.) {
             var new_pos = pos + dir * t_total;
+            var i_voxel_new: vec3<i32> = clamp(vec3<i32>((new_pos + 1.) / 2. * unif.texture_dims), vec3(0, 0, 0), vec3<i32>(unif.texture_dims) - 1);
             var center = get_voxel_center(i_voxel);
-            var normal = get_normal(center, new_pos);            
+            var normal = get_normal(center, new_pos);      
             var color = phongIllumination(K_a, K_d, K_s, shininess, new_pos, lookfrom, normal);
-            // color = vec3<f32>(1., 0., 0.);
+            // color = vec3<f32>(f32(i_voxel.x == i_voxel_new.x), f32(i_voxel.y == i_voxel_new.y), f32(i_voxel.y == i_voxel_new.y));
             return vec4<f32>(color, 1.0);
         }
 
@@ -260,6 +261,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         return vec4<f32>(0.0, 0.0, 0.0, 1.0);
     }
     var pos: vec3<f32> = lookfrom + dir * t.x;
+    var bound: vec3<f32> = lookfrom + dir * t.y;
 
     return fast_marching(pos, dir, K_a, K_d, K_s, shininess, lookfrom);
     // return trivial_marching(pos, dir, K_a, K_d, K_s, shininess, lookfrom);
