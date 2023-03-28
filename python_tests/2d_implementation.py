@@ -56,6 +56,49 @@ def fast_voxel_traversal(dir, world, tmin, tmax):
     return all_pos, world
 
 
+def fast_voxel_traversal2(dir, world, tmin, tmax):
+    pos = eye + tmin * dir
+    voxel_size = torch.tensor([2 / world_size, 2 / world_size])
+    unitstepsize = torch.abs(1 / dir) * voxel_size
+    vMapCheck = torch.clip(((pos + 1) / 2 * torch.tensor([world_size, world_size])).int(), max=world_size - 1, min=0)
+    vStep = torch.sign(dir).int()
+
+    if dir[0] < 0:
+        vRayLength1D_x = (pos[0] - vMapCheck[0] * voxel_size[0]) * unitstepsize[0]
+    else:
+        vRayLength1D_x = (vMapCheck[0] + 1 - pos[0] * voxel_size[0]) * unitstepsize[0]
+
+    if dir[1] < 0:
+        vRayLength1D_y = (pos[1] - vMapCheck[1] * voxel_size[1]) * unitstepsize[1]
+    else:
+        vRayLength1D_y = (vMapCheck[1] + 1 - pos[1] * voxel_size[1]) * unitstepsize[1]
+
+    fDistance = 0
+    all_pos = []
+    for i in range(64):
+        if world[vMapCheck[0], vMapCheck[1]] == 1:
+            world[vMapCheck[0], vMapCheck[1]] = 0.5
+            # Return intersection point
+            all_pos.append(pos + fDistance * dir)
+            return all_pos, world
+
+        if vRayLength1D_x < vRayLength1D_y:
+            vMapCheck[0] += vStep[0]
+            fDistance = vRayLength1D_x
+            vRayLength1D_x += unitstepsize[0]
+        else:
+            vMapCheck[1] += vStep[1]
+            fDistance = vRayLength1D_y
+            vRayLength1D_y += unitstepsize[1]
+
+        all_pos.append(pos + fDistance * dir)
+
+        if torch.any(vMapCheck < 0) or torch.any(vMapCheck > (world_size - 1)):
+            break
+
+    return all_pos, world
+
+
 # Visualization
 class Visualization:
     def __init__(self, resolution):
@@ -97,10 +140,11 @@ if __name__ == '__main__':
 
     dir = dir / torch.norm(dir)
 
-    world_size = 5
+    world_size = 10
 
     # world = np.zeros((world_size, world_size, world_size))
     world = torch.randint(0, 2, size=(world_size, world_size), dtype=torch.float)
+    # world = torch.ones((world_size, world_size), dtype=torch.float)
 
     # Find first intersection
     tmin, tmax = intersect_box(eye, dir, torch.tensor([-1, -1]), torch.tensor([1, 1]))
@@ -111,7 +155,7 @@ if __name__ == '__main__':
     last_intersection = eye + dir * tmax
 
     # Fast voxel traversal
-    positions, world = fast_voxel_traversal(dir, world, tmin, tmax)
+    positions, world = fast_voxel_traversal2(dir, world, tmin, tmax)
 
     vis = Visualization(512)
     vis.add_point_world(eye)
