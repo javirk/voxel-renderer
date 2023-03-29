@@ -78,6 +78,44 @@ fn intersectAABB(rayOrigin: vec3<f32>, rayDir: vec3<f32>, boxMin: vec3<f32>, box
     return vec2<f32>(tNear, tFar);
 }
 
+fn color_map(value: f32) -> vec3<f32> {
+    var color: vec3<f32> = vec3<f32>(0., 0., 0.);
+    /*
+        Light Pink: RGB (1.000, 0.714, 0.757)
+        Light Blue: RGB (0.678, 0.847, 0.902)
+        Khaki: RGB (0.941, 0.902, 0.549)
+        Light Green: RGB (0.565, 0.933, 0.565)
+        Light Gray: RGB (0.827, 0.827, 0.827)
+        Peach: RGB (1.000, 0.855, 0.725)
+        Light Steel Blue: RGB (0.690, 0.769, 0.871)
+        Wheat: RGB (0.961, 0.871, 0.702)
+        Misty Rose: RGB (1.000, 0.894, 0.882)
+        Silver: RGB (0.753, 0.753, 0.753)
+    */
+    if (value < 0.1) {
+        color = vec3<f32>(1.000, 0.714, 0.757);
+    } else if (value < 0.2) {
+        color = vec3<f32>(0.678, 0.847, 0.902);
+    } else if (value < 0.3) {
+        color = vec3<f32> (0.941, 0.902, 0.549);
+    } else if (value < 0.4) {
+        color = vec3<f32>(0.565, 0.933, 0.565);
+    } else if (value < 0.5) {
+        color = vec3<f32> (0.827, 0.827, 0.827);
+    } else if (value < 0.6) {
+        color = vec3<f32>(1.000, 0.855, 0.725);
+    } else if (value < 0.7) {
+        color = vec3<f32>(0.690, 0.769, 0.871);
+    } else if (value < 0.8) {
+        color = vec3<f32> (0.961, 0.871, 0.702);
+    } else if (value < 0.9) {
+        color = vec3<f32>(1.000, 0.894, 0.882);
+    } else {
+        color = vec3<f32>(0.753, 0.753, 0.753);
+    }
+    return color;
+}
+
 /**
  * Lighting contribution of a single point light source via Phong illumination.
  * 
@@ -130,16 +168,21 @@ fn phongContribForLight(k_d: vec3<f32>, k_s: vec3<f32>, alpha: f32, p: vec3<f32>
  *
  * See https://en.wikipedia.org/wiki/Phong_reflection_model#Description
  */
-fn phongIllumination(k_a: vec3<f32>, k_d: vec3<f32>, k_s: vec3<f32>, alpha: f32, p: vec3<f32>, eye: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
-    var ambientLight: vec3<f32> = 0.5 * vec3<f32>(1.0, 1.0, 1.0);
+fn phongIllumination(k_a: vec3<f32>, k_d: vec3<f32>, k_s: vec3<f32>, alpha: f32, p: vec3<f32>, eye: vec3<f32>, n: vec3<f32>, object_color: vec3<f32>) -> vec3<f32> {
+    var ambientLight: vec3<f32> = 0.1 * vec3<f32>(1.0, 1.0, 1.0);
     var color: vec3<f32> = ambientLight * k_a;
     
     var light1Pos: vec3<f32> = vec3<f32>(2., 0., 5.);
-    var light1Intensity: vec3<f32> = vec3<f32>(0.4, 0.4, 0.4);
+    var light1Intensity: vec3<f32> = 0.5*vec3<f32>(1.0, 1.0, 0.9);
     
     color += phongContribForLight(k_d, k_s, alpha, p, eye, n, light1Pos, light1Intensity);
+
+    var light2Pos: vec3<f32> = vec3<f32>(-2., 2., -5.);
+    var light2Intensity: vec3<f32> = 0.5*vec3<f32>(1.0, 1.0, 0.9);
     
-    return color;
+    color += phongContribForLight(k_d, k_s, alpha, p, eye, n, light2Pos, light2Intensity);
+    
+    return color * object_color;
 }
 
 fn rayDirection(lookfrom: vec3<f32>, lookat: vec3<f32>, up: vec3<f32>, fov: f32, tex_pos: vec2<f32>) -> vec3<f32> {
@@ -172,8 +215,9 @@ fn trivial_marching(pos: vec3<f32>, dir: vec3<f32>, K_a: vec3<f32>, K_d: vec3<f3
         var sample: f32 = textureLoad(t_diffuse, sampling_point, 0).r;
         if (sample > 0.) {
             var center = get_voxel_center(sampling_point);
-            var normal = get_normal(center, pos);            
-            var color = phongIllumination(K_a, K_d, K_s, shininess, pos, lookfrom, normal);
+            var normal = get_normal(center, pos);
+            var object_color = color_map(sample);        
+            var color = phongIllumination(K_a, K_d, K_s, shininess, pos, lookfrom, normal, object_color);
             //color = vec3<f32>(1., 0., 0.);
             return vec4<f32>(color, 1.0);
         }
@@ -203,8 +247,9 @@ fn fast_marching(pos: vec3<f32>, dir: vec3<f32>, K_a: vec3<f32>, K_d: vec3<f32>,
         if (sample > 0.) {
             var new_pos = pos + dir * distance;
             var center = get_voxel_center(i_voxel);
-            var normal = get_normal(center, new_pos);      
-            var color = phongIllumination(K_a, K_d, K_s, shininess, new_pos, lookfrom, normal);
+            var normal = get_normal(center, new_pos);
+            var object_color = color_map(sample);  
+            var color = phongIllumination(K_a, K_d, K_s, shininess, new_pos, lookfrom, normal, object_color);
             return vec4<f32>(color, 1.0);
         }
 
