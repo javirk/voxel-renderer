@@ -188,49 +188,45 @@ fn trivial_marching(pos: vec3<f32>, dir: vec3<f32>, K_a: vec3<f32>, K_d: vec3<f3
 }
 
 fn fast_marching(pos: vec3<f32>, dir: vec3<f32>, K_a: vec3<f32>, K_d: vec3<f32>, K_s: vec3<f32>, shininess: f32, lookfrom: vec3<f32>) -> vec4<f32> {
-    var voxel_size = 1./ unif.texture_dims;  // Careful: calculated like this and not 2 / unif.texture_dims because we will use it in a space [0, 1]. Not sure about this.
+    var voxel_size = 2./ unif.texture_dims;
     var i_voxel: vec3<i32> = clamp(vec3<i32>((pos + 1.) / 2. * unif.texture_dims), vec3(0, 0, 0), vec3<i32>(unif.texture_dims) - 1);
     var dir_sign: vec3<f32> = sign(dir);
-    var bound: vec3<f32> = voxel_size * (vec3<f32>(i_voxel) + clamp(dir_sign, vec3(0., 0., 0.), vec3(1., 1., 1.)));
+    var unitstepsize: vec3<f32> = voxel_size * dir_sign / dir;
+    var bound: vec3<f32> = (vec3<f32>(i_voxel) + clamp(dir_sign, vec3(0., 0., 0.), vec3(1., 1., 1.))) / unif.texture_dims;
     bound = bound * 2. - 1.;
+    var ray_length = abs(bound - pos) * unitstepsize / voxel_size;
 
-    var inv_dir: vec3<f32> = 1. / dir;
-    var t: vec3<f32> = (bound - pos) * inv_dir * dir_sign;
-    var delta: vec3<f32> = voxel_size * inv_dir * dir_sign;
+    var distance: f32 = 0.;
 
-    var t_total: f32 = 0.;
-
-    for(var i: i32 = 0; i < 64; i++) {
+    for(var i: i32 = 0; i < 128; i++) {
         var sample: f32 = textureLoad(t_diffuse, i_voxel, 0).r;
         if (sample > 0.) {
-            var new_pos = pos + dir * t_total;
-            var i_voxel_new: vec3<i32> = clamp(vec3<i32>((new_pos + 1.) / 2. * unif.texture_dims), vec3(0, 0, 0), vec3<i32>(unif.texture_dims) - 1);
+            var new_pos = pos + dir * distance;
             var center = get_voxel_center(i_voxel);
             var normal = get_normal(center, new_pos);      
             var color = phongIllumination(K_a, K_d, K_s, shininess, new_pos, lookfrom, normal);
-            // color = vec3<f32>(f32(i_voxel.x == i_voxel_new.x), f32(i_voxel.y == i_voxel_new.y), f32(i_voxel.y == i_voxel_new.y));
             return vec4<f32>(color, 1.0);
         }
 
-        if t.x < t.y {
-            if t.x < t.z {
+        if ray_length.x < ray_length.y {
+            if ray_length.x < ray_length.z {
                 i_voxel.x += i32(dir_sign.x);
-                t.x += delta.x;
-                t_total += delta.x;
+                distance = ray_length.x;
+                ray_length.x += unitstepsize.x;
             } else {
                 i_voxel.z += i32(dir_sign.z);
-                t.z += delta.z;
-                t_total += delta.z;
+                distance = ray_length.z;
+                ray_length.z += unitstepsize.z;
             }
         } else {
-            if t.y < t.z {
+            if ray_length.y < ray_length.z {
                 i_voxel.y += i32(dir_sign.y);
-                t.y += delta.y;
-                t_total += delta.y;
+                distance = ray_length.y;
+                ray_length.y += unitstepsize.y;
             } else {
                 i_voxel.z += i32(dir_sign.z);
-                t.z += delta.z;
-                t_total += delta.z;
+                distance = ray_length.z;
+                ray_length.z += unitstepsize.z;
             }
         }
 

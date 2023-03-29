@@ -1,5 +1,6 @@
 use std::iter;
 use std::time::{SystemTime, UNIX_EPOCH};
+use rand::Rng;
 
 
 use wgpu::util::DeviceExt;
@@ -16,7 +17,7 @@ mod camera;
 use crate::uniforms::{UniformBuffer, Uniform};
 use crate::camera::{Camera, CameraUniform, CameraController};
 
-const DIM: usize = 64;
+const DIM: usize = 8;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -138,16 +139,27 @@ impl State {
         let radius = (DIM / 2) as i32;
         let mut texture_data = [0; DIM * DIM * DIM];
         // Fill the texture with a sphere
+        // for i in 0..texture_data.len() {
+        //     let x = (i % DIM) as i32;
+        //     let y = ((i / DIM) % DIM) as i32;
+        //     let z = (i / (DIM * DIM)) as i32;
+        //     if (x - radius) * (x - radius) + (y - radius) * (y - radius) + (z - radius) * (z - radius) > (radius * radius) {
+        //         continue;
+        //     } else {
+        //         texture_data[i] = 255;
+        //     }
+        // }
+
+        // Write a function to fill the texture with random data
+        let mut rng = rand::thread_rng();
+        let mut texture_data = [0; DIM * DIM * DIM];
         for i in 0..texture_data.len() {
-            let x = (i % DIM) as i32;
-            let y = ((i / DIM) % DIM) as i32;
-            let z = (i / (DIM * DIM)) as i32;
-            if (x - radius) * (x - radius) + (y - radius) * (y - radius) + (z - radius) * (z - radius) > (radius * radius) {
-                continue;
-            } else {
+            let num: f32 = rng.gen();
+            if num > 0.95 {
                 texture_data[i] = 255;
             }
         }
+
 
         let uniform = Uniform::new([DIM as f32, DIM as f32, DIM as f32]);
         let uniform_buf = UniformBuffer::new(uniform, &device);
