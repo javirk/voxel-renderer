@@ -276,10 +276,10 @@ fn fast_marching(pos: vec3<f32>, dir: vec3<f32>, K_a: vec3<f32>, K_d: vec3<f32>,
         }
 
         if (i_voxel.x < 0 || i_voxel.x >= i32(unif.texture_dims.x) || i_voxel.y < 0 || i_voxel.y >= i32(unif.texture_dims.y) || i_voxel.z < 0 || i_voxel.z >= i32(unif.texture_dims.z)) {
-            return vec4<f32>(0., 0., 0., 1.);
+            return vec4<f32>(1., 1., 1., 1.);
         }
     }
-    return vec4<f32>(0., 0., 0., 1.);
+    return vec4<f32>(1., 1., 1., 1.);
 }
 
 
@@ -299,7 +299,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // We start outside of the volume, so we need to find the first intersection. If there is none, the pixel is black.
     var t: vec2<f32> = intersectAABB(lookfrom, dir, vec3<f32>(-1.0, -1.0, -1.0), vec3<f32>(1.0, 1.0, 1.0));
     if (t.x > t.y) {
-        return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        return vec4<f32>(1.0, 1.0, 1.0, 1.0);
     }
     var pos: vec3<f32> = lookfrom + dir * t.x;
     var bound: vec3<f32> = lookfrom + dir * t.y;
